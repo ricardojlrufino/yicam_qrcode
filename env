@@ -1,0 +1,5 @@
+export TOOLCHAIN_PATH=/media/ricardo/Dados/Outros/Linux/tools/toolchain-sunxi-musl/toolchain
+export LIBMAIX_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/MaxIIDevKit/libmaix
+TARGET_DEVICE=root@192.168.15.25
+TARGET_PATH=/tmp/sd/my
+BIN=camerademo
