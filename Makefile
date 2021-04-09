@@ -6,6 +6,7 @@ LIB_SEARCH_PATHS := \
 INCLUDES := \
     $(CUR_PATH) \
 	-I${LIBMAIX_PATH}/components/libmaix/include \
+	-I${LIBQUIRC_PATH} \
 
 LIBS := libcdc_base \
         libglog \
@@ -24,7 +25,8 @@ LIBS := libcdc_base \
         libmpp_vi \
         libVE
 
-LOCAL_STATIC_LIBS := liblibmaix
+STATIC_LIBS :=  liblibmaix \
+                libquirc
 
 CFLAGS += -fpermissive
 
@@ -41,7 +43,7 @@ LDFLAGS := $(LDFLAGS) \
     $(patsubst %,-L%,$(LIB_SEARCH_PATHS)) \
     -Wl,-rpath-link=$(subst $(space),:,$(strip $(LIB_SEARCH_PATHS))) \
     -Wl,-Bstatic \
-    -Wl,--start-group $(foreach n, $(LOCAL_STATIC_LIBS), -l$(patsubst lib%,%,$(patsubst %.a,%,$(notdir $(n))))) -Wl,--end-group \
+    -Wl,--start-group $(foreach n, $(STATIC_LIBS), -l$(patsubst lib%,%,$(patsubst %.a,%,$(notdir $(n))))) -Wl,--end-group \
     -Wl,-Bdynamic \
     $(foreach y, $(LIBS), -l$(patsubst lib%,%,$(patsubst %.so,%,$(notdir $(y)))))
 

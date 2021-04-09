@@ -9,6 +9,7 @@
 
 #include "libmaix_cam.h"
 #include "libmaix_image.h"
+#include "quirc.h"
 #include "convert.h"
 #include "log.h"
 #include <sys/time.h>
@@ -21,19 +22,24 @@
 
 
 #define TEST_RESIZE_IMAGE 0
-
+#define LED_CHANGE 1 // Change led on detect QRCODE
 
 // int res_w = 240, res_h = 240;
 int res_w = 640, res_h = 480;
-char *out_dir = "/tmp/sd";
+char *out_dir = "/tmp/sd/record";
 int capture_count = 1;
 
+int qr_error_count = 0;
+int qr_save_onerror = 1; // used to debug.
 
 void capture_loop(){
     libmaix_err_t err = LIBMAIX_ERR_NONE;
     struct libmaix_cam* cam     = NULL;
     libmaix_image_t* img        = NULL;
     libmaix_image_t* resize_img = NULL;
+
+    struct quirc *qr;
+    uint8_t * qr_buf;
 
     logi("image module init");
     libmaix_image_module_init();
@@ -45,12 +51,12 @@ void capture_loop(){
         loge("create yuv image fail");
         goto end;
     }
-    libmaix_image_t* rgb_img = libmaix_image_create(res_w, res_h, LIBMAIX_IMAGE_MODE_RGB888, LIBMAIX_IMAGE_LAYOUT_HWC, NULL, true);
-    if(!rgb_img)
-    {
-        loge("create rgb image fail");
-        goto end;
-    }
+//    libmaix_image_t* rgb_img = libmaix_image_create(res_w, res_h, LIBMAIX_IMAGE_MODE_RGB888, LIBMAIX_IMAGE_LAYOUT_HWC, NULL, true);
+//    if(!rgb_img)
+//    {
+//        loge("create rgb image fail");
+//        goto end;
+//    }
     logi("--create cam");
     cam = libmaix_cam_creat(res_w, res_h);
     if(!cam)
@@ -58,6 +64,19 @@ void capture_loop(){
         loge("create cam fail");
         goto end;
     }
+
+    qr = quirc_new();
+	if (!qr) {
+		loge("couldn't allocate QR decoder");
+		goto end;
+	}
+
+	if (quirc_resize(qr, res_w, res_h) < 0) {
+		loge("couldn't allocate QR buffer");
+		quirc_destroy(qr);
+		goto end;
+	}
+
     logi("--cam start capture");
     err = cam->strat_capture(cam);
     if(err != LIBMAIX_ERR_NONE)
@@ -75,7 +94,7 @@ void capture_loop(){
 #endif
 
     int index = 0;
-    while(index < capture_count)
+    while(1)
     {
         // printf("--cam capture\n");
         LOG_TIME_START();
@@ -99,19 +118,66 @@ void capture_loop(){
 
         LOG_TIME_START();
 
-        char bmp_data_path[50];
-        sprintf(bmp_data_path, "%s/img-%d.bmp", out_dir, index);
-        logw(" >>>>> Saving file: %s", bmp_data_path);
-        YUVToBMP(bmp_data_path, img->data, NV12ToRGB24, img->width, img->height);
+//        char bmp_data_path[50];
+//        sprintf(bmp_data_path, "%s/img-%d.bmp", out_dir, index);
+//        logw(" >>>>> Saving file: %s", bmp_data_path);
+//        YUVToBMP(bmp_data_path, img->data, NV12ToRGB24, img->width, img->height);
 
-        // // printf("--conver YUV to RGB\n");
-        // libmaix_err_t err0 = img->convert(img, LIBMAIX_IMAGE_MODE_RGB888, &rgb_img);
-        // if(err0 != LIBMAIX_ERR_NONE)
-        // {
-        //     printf("conver to RGB888 fail:%s\r\n", libmaix_get_err_msg(err0));
-        //     continue;
-        // }
-        // printf("--convert test end\n");
+        // Quirc begin
+        qr_buf = quirc_begin(qr, NULL, NULL);
+
+        /* copy Y */
+        for(int i = 0; i < img->width * img->height; i++){
+        	qr_buf[i] = ((uint8_t *)img->data)[2*i];
+        }
+
+        // img->data[2*i]
+
+//         // FILLL // --conver YUV to RGB
+//         libmaix_err_t err0 = img->convert(img, LIBMAIX_IMAGE_MODE_RGB888, &qr_buf);
+//         if(err0 != LIBMAIX_ERR_NONE)
+//         {
+//             printf("conver to RGB888 fail:%s\r\n", libmaix_get_err_msg(err0));
+//             continue;
+//         }
+//         printf("--convert test end\n");
+
+        // Quirc end
+		quirc_end(qr);
+
+		int count = quirc_count(qr);
+		logi("Decoding qrcode , count: %d \n", count);
+
+//		if(count <= 0 && LED_CHANGE) system("/home/yi-hack/bin/ipc_cmd -l OFF");
+
+		for (int i = 0; i < count; i++) {
+			struct quirc_code code;
+			struct quirc_data data;
+
+			quirc_extract(qr, i, &code);
+			err = quirc_decode(&code, &data);
+			if (err){
+				printf("Decode failed: %s\n", quirc_strerror(err));
+
+				// Save snapshot of current failure
+				qr_error_count++;
+				if(qr_save_onerror){
+					char bmp_data_path[50];
+					sprintf(bmp_data_path, "%s/img-%d.bmp", out_dir, qr_error_count);
+					logw(" >>>>> Saving file: %s", bmp_data_path);
+					YUVToBMP(bmp_data_path, img->data, NV12ToRGB24, img->width, img->height);
+					sleep(1);
+				}
+
+			}else{
+
+				fprintf(stderr, " - Data: %s\n", data.payload);
+//				fprintf(stdout, "\a" ); // BEEP !!!
+//				sleep(2);
+//				if(LED_CHANGE) system("/home/yi-hack/bin/ipc_cmd -l ON");
+			}
+
+		}
 
         LOG_TIME_END("Save BMP");
 
@@ -129,6 +195,13 @@ void capture_loop(){
     }
     
 end:
+
+	if(qr_buf)
+    {
+        logv("--qr destory");
+        quirc_destroy(qr);
+        free(qr_buf);
+    }
     if(resize_img)
     {
         logv("--image destory");
@@ -139,11 +212,11 @@ end:
         logv("--cam destory");
         libmaix_cam_destroy(&cam);
     }
-    if(rgb_img)
-    {
-        logv("--image destory");
-        libmaix_image_destroy(&rgb_img);
-    }
+//    if(rgb_img)
+//    {
+//        logv("--image destory");
+//        libmaix_image_destroy(&rgb_img);
+//    }
     if(img)
     {
         logv("--image destory");
