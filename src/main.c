@@ -1,103 +1,166 @@
-/**
- * 
- **/
+/*
+ * Copyright (c) 2021 Ricardo JL Rufino.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 
-#include "stdio.h"
-#include <stdint.h>
-#include <stdbool.h>
+/*
+ *  Created on: 9 de abr. de 2021
+ *  Author: Ricardo JL Rufino
+ */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include "libmaix_cam.h"
 #include "libmaix_image.h"
 #include "quirc.h"
+
+// App includes
 #include "convert.h"
 #include "log.h"
-#include <sys/time.h>
-#include <unistd.h>
-
-// Used in replug_sensor();
-#define SENSOR_MODULE "/home/qigan/ko/sensor_power.ko"
-#define SENSOR_PARAMS "dvdd0_vol=\"1800000\" mclk0=\"27000000\""
+#include "app_settings.h"
+#include "sound.h"
 
 
+// TODO xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+// [] Play sound on capture
+// [] Show led status
+// [] Write qrcode to FIFO
 
-#define TEST_RESIZE_IMAGE 0
-#define LED_CHANGE 1 // Change led on detect QRCODE
+
+int qrcode_fd;
+int periph_fd; // gpio
 
 // int res_w = 240, res_h = 240;
 int res_w = 640, res_h = 480;
-char *out_dir = "/tmp/sd/record";
-int capture_count = 1;
+int enable_sound;
 
+// Debug errors
+char *out_dir = SNAPSHOT_DEFAULT_DIR;
 int qr_error_count = 0;
 int qr_save_onerror = 1; // used to debug.
 
-void capture_loop(){
-    libmaix_err_t err = LIBMAIX_ERR_NONE;
-    struct libmaix_cam* cam     = NULL;
-    libmaix_image_t* img        = NULL;
-    libmaix_image_t* resize_img = NULL;
+//
+libmaix_err_t err = LIBMAIX_ERR_NONE;
+struct libmaix_cam* cam     = NULL;
+libmaix_image_t* img        = NULL;
+libmaix_image_t* resize_img = NULL;
 
-    struct quirc *qr;
-    uint8_t * qr_buf;
+struct quirc *qr;
+uint8_t * qr_buf;
 
-    logi("image module init");
-    libmaix_image_module_init();
+void stop_capture();
 
-    logi("create image");
-    img = libmaix_image_create(res_w, res_h, LIBMAIX_IMAGE_MODE_YUV420SP_NV21, LIBMAIX_IMAGE_LAYOUT_HWC, NULL, true);
-    if(!img)
-    {
-        loge("create yuv image fail");
-        goto end;
-    }
+void my_handler(int s){
+   printf("Caught signal %d\n",s);
+   stop_capture();
+   exit(1);
+}
+
+void stop_capture(){
+
+	if(qrcode_fd){
+		logi("close qrcode fd");
+		unlink(qrcode_fd);
+	}
+
+	if(qr){
+		logi("qr destory");
+		quirc_destroy(qr);
+	}
+
+	if(resize_img){
+		logi("image destory");
+		libmaix_image_destroy(&resize_img);
+	}
+
+	if(cam){
+		logi("cam destory");
+		libmaix_cam_destroy(&cam);
+	}
+//    if(rgb_img)
+//    {
+//        logv("--image destory");
+//        libmaix_image_destroy(&rgb_img);
+//    }
+	if(img){
+		logi("image destory");
+		libmaix_image_destroy(&img);
+	}
+
+	logi("image module deinit");
+	libmaix_image_module_deinit();
+}
+
+void capture_init(){
+	// Creating the named file(FIFO)
+	logi("Create fifo " QRCODE_WRITE_FIFO);
+	mkfifo(QRCODE_WRITE_FIFO, 0666);
+
+	logi("image module init");
+	libmaix_image_module_init();
+
+	logi("image_create...");
+	img = libmaix_image_create(res_w, res_h, LIBMAIX_IMAGE_MODE_YUV420SP_NV21, LIBMAIX_IMAGE_LAYOUT_HWC, NULL, true);
+	if(!img){
+		loge("create yuv image fail");
+		stop_capture();
+	}
 //    libmaix_image_t* rgb_img = libmaix_image_create(res_w, res_h, LIBMAIX_IMAGE_MODE_RGB888, LIBMAIX_IMAGE_LAYOUT_HWC, NULL, true);
 //    if(!rgb_img)
 //    {
 //        loge("create rgb image fail");
 //        goto end;
 //    }
-    logi("--create cam");
-    cam = libmaix_cam_creat(res_w, res_h);
-    if(!cam)
-    {
-        loge("create cam fail");
-        goto end;
-    }
 
-    qr = quirc_new();
+	logi("cam_create...");
+	cam = libmaix_cam_creat(res_w, res_h);
+	if(!cam){
+		loge("create cam fail");
+		stop_capture();
+	}
+
+	logi("quirc_new...");
+	qr = quirc_new();
 	if (!qr) {
 		loge("couldn't allocate QR decoder");
-		goto end;
+		stop_capture();
 	}
 
 	if (quirc_resize(qr, res_w, res_h) < 0) {
 		loge("couldn't allocate QR buffer");
 		quirc_destroy(qr);
-		goto end;
+		stop_capture();
 	}
+}
 
-    logi("--cam start capture");
+void capture_loop(){
+
+    logi("start capture");
     err = cam->strat_capture(cam);
-    if(err != LIBMAIX_ERR_NONE)
-    {
+    if(err != LIBMAIX_ERR_NONE){
         loge("start capture fail: %s", libmaix_get_err_msg(err));
-        goto end;
+        stop_capture();
     }
-#if TEST_RESIZE_IMAGE
-    resize_img = libmaix_image_create(224, 224, LIBMAIX_IMAGE_MODE_RGB888, LIBMAIX_IMAGE_LAYOUT_HWC, NULL, true);
-    if(!resize_img)
-    {
-        printf("create image error!\n");
-        goto end;
-    }
-#endif
 
-    int index = 0;
     while(1)
     {
-        // printf("--cam capture\n");
-        LOG_TIME_START();
+        __LOG_TIME_START();
+
         img->mode = LIBMAIX_IMAGE_MODE_YUV420SP_NV21;
         err = cam->capture(cam, (unsigned char*)img->data);
 
@@ -112,11 +175,9 @@ void capture_loop(){
             break;
         }
 
-        LOG_TIME_END("capture");
+        __LOG_TIME_END("capture");
 
-        index++;
-
-        LOG_TIME_START();
+        __LOG_TIME_START();
 
 //        char bmp_data_path[50];
 //        sprintf(bmp_data_path, "%s/img-%d.bmp", out_dir, index);
@@ -127,13 +188,14 @@ void capture_loop(){
         qr_buf = quirc_begin(qr, NULL, NULL);
 
         /* copy Y */
-        for(int i = 0; i < img->width * img->height; i++){
-        	qr_buf[i] = ((uint8_t *)img->data)[2*i];
-        }
+//        for(int i = 0; i < img->width * img->height; i++){
+//        	qr_buf[i] = ((char *)img->data)[2*i];
+//        }
+//
+        //copy Y
+        memcpy(qr_buf,img->data, img->width * img->height);
 
-        // img->data[2*i]
-
-//         // FILLL // --conver YUV to RGB
+//         //  --conver YUV to RGB
 //         libmaix_err_t err0 = img->convert(img, LIBMAIX_IMAGE_MODE_RGB888, &qr_buf);
 //         if(err0 != LIBMAIX_ERR_NONE)
 //         {
@@ -146,9 +208,11 @@ void capture_loop(){
 		quirc_end(qr);
 
 		int count = quirc_count(qr);
-		logi("Decoding qrcode , count: %d \n", count);
+//		logi("Decoding qrcode , count: %d \n", count);
 
-//		if(count <= 0 && LED_CHANGE) system("/home/yi-hack/bin/ipc_cmd -l OFF");
+		if(count <= 0 && LED_CHANGE) ioctl(periph_fd, _IO(0x70, 0x1b), 0); // OFF
+
+		if(count >= 1 && enable_sound) beepSound();
 
 		for (int i = 0; i < count; i++) {
 			struct quirc_code code;
@@ -160,70 +224,35 @@ void capture_loop(){
 				printf("Decode failed: %s\n", quirc_strerror(err));
 
 				// Save snapshot of current failure
+				#if(SNAPSHOT_ON_ERROR)
 				qr_error_count++;
 				if(qr_save_onerror){
 					char bmp_data_path[50];
 					sprintf(bmp_data_path, "%s/img-%d.bmp", out_dir, qr_error_count);
 					logw(" >>>>> Saving file: %s", bmp_data_path);
 					YUVToBMP(bmp_data_path, img->data, NV12ToRGB24, img->width, img->height);
-					sleep(1);
+//					sleep(1);
 				}
+				#endif
 
 			}else{
 
 				fprintf(stderr, " - Data: %s\n", data.payload);
-//				fprintf(stdout, "\a" ); // BEEP !!!
-//				sleep(2);
-//				if(LED_CHANGE) system("/home/yi-hack/bin/ipc_cmd -l ON");
+
+//				qrcode_fd = open(QRCODE_WRITE_FIFO, O_WRONLY);
+//				write(qrcode_fd, data.payload, strlen(data.payload)+1);
+//				close(qrcode_fd);
+
+				if(LED_CHANGE) ioctl(periph_fd, _IO(0x70, 0x1c), 0); // ON
 			}
 
 		}
 
-        LOG_TIME_END("Save BMP");
-
-#if TEST_RESIZE_IMAGE
-        LOG_TIME_START();
-        err0 = rgb_img->resize(rgb_img, resize_img->width, resize_img->height, &resize_img);
-        if(err0 != LIBMAIX_ERR_NONE)
-        {
-            printf("resize image error: %s\r\n", libmaix_get_err_msg(err0));
-            continue;
-        }
-        LOG_TIME_END("resize image");
-#endif
-
+        __LOG_TIME_END("QR Decoding time");
     }
     
-end:
+    stop_capture();
 
-	if(qr_buf)
-    {
-        logv("--qr destory");
-        quirc_destroy(qr);
-        free(qr_buf);
-    }
-    if(resize_img)
-    {
-        logv("--image destory");
-        libmaix_image_destroy(&resize_img);
-    }
-    if(cam)
-    {
-        logv("--cam destory");
-        libmaix_cam_destroy(&cam);
-    }
-//    if(rgb_img)
-//    {
-//        logv("--image destory");
-//        libmaix_image_destroy(&rgb_img);
-//    }
-    if(img)
-    {
-        logv("--image destory");
-        libmaix_image_destroy(&img);
-    }
-    logv("--image module deinit");
-    libmaix_image_module_deinit();
 }
 
 // Before capture we need restart sensor..
@@ -231,19 +260,18 @@ void replug_sensor(){
     logi("restart sensor ");
     system("rmmod " SENSOR_MODULE);
     system("insmod " SENSOR_MODULE " " SENSOR_PARAMS);
-    sleep(1);
 }
 
 
 int parse_args(int argc, char* argv[]){
 
-    if(argc == 1) {
-        loge("Usage: ./camerademo -d /tmp/sd/record -w 640 -h 480 -n NUM_IMAGES");
-        return -1;
-    }
+//    if(argc == 1) {
+//        loge("Usage: ./camerademo -d /tmp/sd/record -w 640 -h 480");
+//        return -1;
+//    }
 
     for (;;) {
-        int opt = getopt(argc, argv, ":d:w:h:n:");
+        int opt = getopt(argc, argv, ":d:w:h:s");
         if (opt == -1)
             break;
         switch (opt) {
@@ -257,33 +285,41 @@ int parse_args(int argc, char* argv[]){
             fprintf(stdout, "Using directory: %s\n", optarg);
             out_dir = optarg;
             break;
+        case 's':
+            enable_sound = 1;
+            break;
         case 'w':
             res_w = atoi(optarg);
             break;
         case 'h':
             res_h = atoi(optarg);
             break;
-        case 'n':
-            capture_count = atoi(optarg);
-            break;            
         }
     }
 
     return 0;
 }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char *argv[]) {
 
-   if(parse_args(argc, argv) < 0) return -1;
+	if (parse_args(argc, argv) < 0) return -1;
 
-    replug_sensor();
+	signal(SIGINT, my_handler);
 
-    capture_loop();
+	// this is needed to power sensor
+	logi("Init /dev/cpld_periph ");
+	periph_fd = open("/dev/cpld_periph", O_RDWR);
+	ioctl(periph_fd, _IOC(0, 0x70, 0x15, 0x00), 0);
+	ioctl(periph_fd, _IOC(0, 0x70, 0x16, 0x00), 0);
+	ioctl(periph_fd, _IOC(0, 0x70, 0x13, 0x00), 0xbefa5c3c);
 
-        // //register process function for SIGINT, to exit program.
-    // if (signal(SIGINT, handle_exit) == SIG_ERR)
-    //     perror("can't catch SIGSEGV");
+	// restart sensor before each capture
+	replug_sensor();
+	sleep(1);
 
-    return 0;
+	capture_init();
+
+	capture_loop();
+
+	return 0;
 }

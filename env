@@ -5,4 +5,4 @@ export LIBQUIRC_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/yi-hack-All
 
 TARGET_DEVICE=root@192.168.15.25
 TARGET_PATH=/tmp/sd/my
-BIN=camerademo2
+BIN=yicam_qrcode

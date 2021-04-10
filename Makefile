@@ -7,6 +7,7 @@ INCLUDES := \
     $(CUR_PATH) \
 	-I${LIBMAIX_PATH}/components/libmaix/include \
 	-I${LIBQUIRC_PATH} \
+	-I/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/yi-hack-Allwinner/TESTES/alsa-lib/include 
 
 LIBS := libcdc_base \
         libglog \
@@ -23,13 +24,13 @@ LIBS := libcdc_base \
         libmpp_isp \
         libmpp_mini \
         libmpp_vi \
-        libVE
+        libVE \
+        libasound \
 
 STATIC_LIBS :=  liblibmaix \
                 libquirc
 
-CFLAGS += -fpermissive
-
+#CFLAGS += -fpermissive
 
 
 SRC_DIR := src
