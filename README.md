@@ -1,5 +1,7 @@
 QRCode reading application for IP cameras with ALLWINNER processor and SP2305 MIPI-CSI Sensor
 
+Demonstration: https://youtu.be/o10Hf9vFvKs	
+
 **Stage**: BETA
 
 ![](https://github.com/fritz-smh/yi-hack/raw/master/yi.jpg?raw=true)
