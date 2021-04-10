@@ -1,0 +1,8 @@
+export TOOLCHAIN_PATH=/media/ricardo/Dados/Outros/Linux/tools/toolchain-sunxi-musl/toolchain
+
+export LIBMAIX_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/MaxIIDevKit/libmaix
+export LIBQUIRC_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/yi-hack-Allwinner/quirc/quirc/lib
+
+TARGET_DEVICE=root@192.168.15.25
+TARGET_PATH=/tmp/sd/my
+BIN=test_read
