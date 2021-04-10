@@ -19,11 +19,18 @@ Currently this project tested only in the following cameras:
 - Detect the qrcode on mobile screens
 - Detect the qrcode on paper
 - Good capture angle
-- Good capture range (Needs manual changes in the lens focus)
+- Good capture range ([Needs manual changes in the lens focus](https://github.com/ricardojlrufino/yicam_qrcode/wiki/Improve-Focus))
 - Readings at night using Night Vision (needs more tests)
 - Change Led on Detect 
-- PlaySound on Detect (need aplay) #1 (PROBLEMAS QUE TEM QUE USAR O rmm)
+- PlaySound on Detect (need aplay) [#1](/../../issues/1)
 - Write detected qrcode to FIFO file ([see example](test/src/test_read_fifo.c))
+
+### TODO
+
+- [ ] Fix audio setup [#1](/../../issues/1)
+- [ ] Create an example that reads the QRCode and send an HTTP request
+- [ ] Create the script to restart the application if it fails
+- [ ] Create demonstration video
 
 ## Performance
 
