@@ -30,6 +30,8 @@
 #include "quirc.h"
 
 // App includes
+
+
 #include "convert.h"
 #include "log.h"
 #include "app_settings.h"
@@ -104,6 +106,9 @@ void stop_capture(){
 
 	logi("image module deinit");
 	libmaix_image_module_deinit();
+
+	logi("free sound");
+	sound_close();
 }
 
 void capture_init(){
@@ -212,8 +217,6 @@ void capture_loop(){
 
 		if(count <= 0 && LED_CHANGE) ioctl(periph_fd, _IO(0x70, 0x1b), 0); // OFF
 
-		if(count >= 1 && enable_sound) beepSound();
-
 		for (int i = 0; i < count; i++) {
 			struct quirc_code code;
 			struct quirc_data data;
@@ -239,11 +242,17 @@ void capture_loop(){
 
 				fprintf(stderr, " - Data: %s\n", data.payload);
 
+//				if(strcmp(data.payload, "0000000004") == 0){
+//					system("aplay /tmp/sd/my/palmeiras.wav");
+//				}
+
 //				qrcode_fd = open(QRCODE_WRITE_FIFO, O_WRONLY);
 //				write(qrcode_fd, data.payload, strlen(data.payload)+1);
 //				close(qrcode_fd);
 
 				if(LED_CHANGE) ioctl(periph_fd, _IO(0x70, 0x1c), 0); // ON
+
+				if(i == 0 && enable_sound) beepSound();
 			}
 
 		}
@@ -312,6 +321,17 @@ int main(int argc, char *argv[]) {
 	ioctl(periph_fd, _IOC(0, 0x70, 0x15, 0x00), 0);
 	ioctl(periph_fd, _IOC(0, 0x70, 0x16, 0x00), 0);
 	ioctl(periph_fd, _IOC(0, 0x70, 0x13, 0x00), 0xbefa5c3c);
+
+
+	// init alsa and load sound
+	if (enable_sound){
+
+		// enable audio
+		ioctl(periph_fd, _IOC(0, 0x70, 0x10, 0x0), 0);
+
+		sound_init(SOUND_PATH);
+
+	}
 
 	// restart sensor before each capture
 	replug_sensor();

@@ -8,6 +8,9 @@
 
 #define SOUND_PATH "/tmp/sd/my/job-done-501-16khz.wav"
 
+// TODO: need improvements in wav to C converter
+#define SOUND_AS_HEADER 1 // ignore sound .wav and use beep.h ( pre converted wav )
+
 #define QRCODE_WRITE_FIFO "/tmp/qrcode_read"
 
 // Used in replug_sensor();

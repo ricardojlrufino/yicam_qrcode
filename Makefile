@@ -7,7 +7,7 @@ INCLUDES := \
     $(CUR_PATH) \
 	-I${LIBMAIX_PATH}/components/libmaix/include \
 	-I${LIBQUIRC_PATH} \
-	-I/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/yi-hack-Allwinner/TESTES/alsa-lib/include 
+	-I${LIBALSA_PATH} \
 
 LIBS := libcdc_base \
         libglog \

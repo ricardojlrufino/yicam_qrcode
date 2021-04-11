@@ -2,6 +2,8 @@ export TOOLCHAIN_PATH=/media/ricardo/Dados/Outros/Linux/tools/toolchain-sunxi-mu
 
 export LIBMAIX_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/MaxIIDevKit/libmaix
 export LIBQUIRC_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/yi-hack-Allwinner/quirc/quirc/lib
+export LIBALSA_PATH=/media/ricardo/Dados/Outros/Linux/IPCAM/YI_HOME/TESTES/alsa-lib-1.2.4/install/include/
+
 
 TARGET_DEVICE=root@192.168.15.25
 TARGET_PATH=/tmp/sd/my
