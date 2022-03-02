@@ -29,7 +29,7 @@
 	#define __LOG_TIME_START() do{gettimeofday( &start, NULL );}while(0)
 	#define __LOG_TIME_END(name)   do{gettimeofday( &end, NULL ); \
 								interval_s  =(int64_t)(end.tv_sec - start.tv_sec)*1000000ll; \
-								printf("%s use time: %lld us\n", name, interval_s + end.tv_usec - start.tv_usec);\
+								printf("%s use time: %lld ms\n", name, (interval_s + end.tv_usec - start.tv_usec) / 1000 );\
 								}while(0)
 #else
 
